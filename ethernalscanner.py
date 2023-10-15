@@ -2,7 +2,7 @@ import os
 import subprocess
 import shodan
 
-api_key = "YOUR_SHODAN_API_KEY"
+api_key = "YOUR_SHODAN_API_KEY"  # Replace with your Shodan API key
 api = shodan.Shodan(api_key)
 
 def cleanup():
@@ -20,26 +20,30 @@ def red_text(text):
 def perform_nmap_scan(ip, output_file, vuln_file):
     debug_message(f"Scanning {ip} for EternalBlue vulnerability on port 445...")
 
-    subprocess.run(["nmap", "-p", "445", "--script", "smb-vuln-ms17-010", "--open", "-v", ip], stdout=output_file, text=True)
+    nmap_output = subprocess.check_output(["nmap", "-p", "445", "--script", "smb-vuln-ms17-010", "--open", "-v", ip], text=True)
 
-    with open(output_file, 'r') as file:
-        output_data = file.read()
-        if "A critical remote code execution vulnerability exists" in output_data:
-            with open(vuln_file, 'a') as vuln:
-                vuln.write(f"{ip} | A critical remote code execution vulnerability exists in Microsoft SMBv1\n")
-            red_text(f"Vulnerable Host: {ip}")
+    with open(output_file, "a") as file:
+        file.write(nmap_output)
+
+    if "A critical remote code execution vulnerability exists" in nmap_output:
+        with open(vuln_file, 'a') as vuln:
+            vuln.write(f"{ip} | A critical remote code execution vulnerability exists in Microsoft SMBv1\n")
+        red_text(f"Vulnerable Host: {ip}")
 
 cleanup()
 
 target_country = input("Enter the target country: ")
 
-output_file = open("nmap_results.txt", "a")
+output_file = "nmap_results.txt"
 
 vulnerable_hosts = open("vulnerable_hosts.txt", "a")
 
 max_concurrent_scans = 5
 
 host_count = 0
+
+if not os.path.exists("ip_addresses.txt"):
+    open("ip_addresses.txt", "a").close()
 
 while host_count < 1000:
     debug_message(f"Performing Shodan search (batch {host_count // 1000 + 1})...")
@@ -59,7 +63,7 @@ while host_count < 1000:
 
     with open("ip_addresses.txt", "a") as ip_addresses:
         for ip in ip_addresses_temp:
-            if ip not in ip_addresses:
+            if ip not in open("ip_addresses.txt").read():
                 ip_addresses.write(f"{ip}\n")
 
     for ip in ip_addresses_temp:
@@ -68,6 +72,11 @@ while host_count < 1000:
 
         perform_nmap_scan(ip, output_file, vulnerable_hosts)
         host_count += 1
+
+    # Check if there are no more IPs in the ip_addresses.txt file, and if so, break the loop
+    with open("ip_addresses.txt", "r") as ip_addresses:
+        if not ip_addresses.read():
+            break
 
 print("Vulnerable Hosts:")
 with open("vulnerable_hosts.txt", "r") as vuln_hosts:
